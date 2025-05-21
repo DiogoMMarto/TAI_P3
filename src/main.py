@@ -20,10 +20,8 @@ def prepare_database_signatures():
 
     for audio_file in config.DATABASE_MUSIC_DIR.iterdir():
         if audio_file.suffix.lower() in ['.wav', '.flac', '.mp3']:
-            success = audio_utils.process_audio_file(audio_file)
-            if success:
-                log("INFO",f"Successfully generated signatures.")
-            else:
+            success = audio_utils.process_audio_file(audio_file)                
+            if not success:
                 log("ERROR",f"Failed to generate signatures for {audio_file.name}")
         else:
             log("WARNING",f"Skipping non-audio file: {audio_file.name}")
@@ -40,7 +38,7 @@ def identify_music(query_audio_path: Path,
     log("INFO",f"\n--- Identifying Music for Query: {query_audio_path.name} ---")
     if not query_audio_path.exists():
         log("ERROR",f"Query audio file not found: {query_audio_path}")
-        return
+        return {}
 
     actual_query_file = query_audio_path
 
@@ -49,7 +47,7 @@ def identify_music(query_audio_path: Path,
         log("INFO",f"Adding noise to {query_audio_path.name}")
         if not audio_utils.add_noise(query_audio_path, noisy_segment_path, noise_params):
             log("ERROR","Failed to add noise.")
-            return
+            return {}
         actual_query_file = noisy_segment_path
 
     segment_duration = config.SEGMENT_DURATION
@@ -61,7 +59,7 @@ def identify_music(query_audio_path: Path,
                                           segment_duration=segment_duration, 
                                           database_signature_path=signatures_of_query_dir):
         log("ERROR","Failed to process audio file.")
-        return
+        return {}
 
     results_by_compressor: dict[dict[str, list[str, float]]] = {}
 
@@ -105,7 +103,7 @@ def cleanup_temp_files():
 def main():
     """
     Main function to run the script.
-    """
+    # """
     log("INFO","--- Starting Music Identification Script ---")
     prepare_database_signatures()
     for query_file_path in config.QUERY_SAMPLES_DIR.iterdir():
