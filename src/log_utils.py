@@ -1,5 +1,6 @@
-from config import LOG_LEVEL
 import datetime
+
+LOG_LEVEL = "INFO"
 
 color = {
     "INFO": "\033[94m",
