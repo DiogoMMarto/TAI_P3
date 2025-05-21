@@ -113,7 +113,7 @@ def main():
             log("INFO",f"Processing query file: {query_file_path.name}")
             ranks = identify_music(query_file_path)
             p = rank_results(ranks)
-            log("INFO",f"Ranked results: {p}")
+            log("INFO",f"Ranked results for {query_file_path.name}: {p}")
         else:
             log("WARNING",f"Skipping non-audio file: {query_file_path.name}")
     cleanup_temp_files()
