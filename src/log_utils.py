@@ -3,6 +3,7 @@ import datetime
 LOG_LEVEL = "INFO"
 
 color = {
+    "DEBUG": "\033[92m",
     "INFO": "\033[94m",
     "WARNING": "\033[93m", 
     "ERROR": "\033[91m",  
@@ -14,7 +15,9 @@ def log(level, *args):
     Logs a message with the specified logging level.
     """
     date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if level == "INFO" and LOG_LEVEL != "INFO":
+    if level == "DEBUG" and LOG_LEVEL != "DEBUG":
+        return
+    if level == "INFO" and LOG_LEVEL != "INFO" and LOG_LEVEL != "DEBUG":
         return
     if level == "WARNING" and LOG_LEVEL == "ERROR":
         return
