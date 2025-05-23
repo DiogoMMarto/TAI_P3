@@ -1,12 +1,21 @@
 # main_script.py
+from math import exp
 from pathlib import Path
-from pprint import pprint
 import shutil
+from typing import Tuple
+
+import concurrent.futures
 
 import config
 import audio_utils
 import compression_utils
 from log_utils import log
+
+def softmax(x):
+    max_x = max(x)
+    exp_x = [exp(i-max_x) for i in x]
+    sum_exp_x = sum(exp_x)
+    return [i / sum_exp_x for i in exp_x]
 
 def prepare_database_signatures():
     """
@@ -27,6 +36,27 @@ def prepare_database_signatures():
             log("WARNING",f"Skipping non-audio file: {audio_file.name}")
     log("INFO","--- Database Signature Preparation Complete ---")
 
+def calculate_ncd_worker(
+    signature_file: Path,
+    db_signature_file: Path,
+    compressor: str
+) -> Tuple[str, str, str, float] | None:
+    """
+    Worker function to calculate NCD for a single pair of files.
+    """
+    try:
+        ncd = compression_utils.calculate_ncd(
+            signature_file, db_signature_file, compressor
+        )
+        db_signature_dir_name = db_signature_file.parent.name
+        query_stem = signature_file.stem
+        db_path = f"{db_signature_dir_name}/{db_signature_file.stem}"
+        return (compressor, query_stem, db_path, ncd)
+    except Exception as e:
+        log("ERROR", f"Failed NCD: {signature_file.name} vs "
+                   f"{db_signature_file.name} with {compressor}. Error: {e}")
+        return None
+
 def identify_music(query_audio_path: Path,
                    use_segment: bool = True,
                    add_noise_flag: bool = False,
@@ -35,7 +65,7 @@ def identify_music(query_audio_path: Path,
     """
     Identifies a query audio by comparing its NCD against the database signatures
     """
-    log("INFO",f"\n--- Identifying Music for Query: {query_audio_path.name} ---")
+    log("INFO",f"--- Identifying Music for Query: {query_audio_path.name} ---")
     if not query_audio_path.exists():
         log("ERROR",f"Query audio file not found: {query_audio_path}")
         return {}
@@ -63,16 +93,45 @@ def identify_music(query_audio_path: Path,
 
     results_by_compressor: dict[dict[str, list[str, float]]] = {}
 
-    for compressor in config.COMPRESSORS: 
-        log("INFO",f"Using Compressor: {compressor}")
-        for signature_file in signatures_of_query_dir.rglob("*.freqs"):
-            for db_signature_dir in config.DATABASE_SIGNATURES_DIR.iterdir():
-                for db_signature_file in db_signature_dir.rglob("*.freqs"):
-                    ncd = compression_utils.calculate_ncd(signature_file, db_signature_file, compressor)
-                    results_by_compressor.setdefault(compressor, {}) \
-                        .setdefault(signature_file.stem, []) \
-                        .append((db_signature_dir.name + "/" + db_signature_file.stem, ncd))
+    tasks_to_submit = []
 
+    query_files = list(signatures_of_query_dir.rglob("*.freqs"))
+    db_files = []
+    for db_signature_dir in config.DATABASE_SIGNATURES_DIR.iterdir():
+        if db_signature_dir.is_dir():
+            db_files.extend(list(db_signature_dir.rglob("*.freqs")))
+
+    log("INFO", f"Found {len(query_files)} query files and {len(db_files)} DB files.")
+
+    for compressor in config.COMPRESSORS:
+        for signature_file in query_files:
+            for db_signature_file in db_files:
+                tasks_to_submit.append(
+                    (signature_file, db_signature_file, compressor)
+                )
+
+    log("INFO", f"Total NCD calculations to perform: {len(tasks_to_submit)}")
+
+    # Execute tasks in parallel
+    # You can adjust max_workers. None usually means using all available CPU cores.
+    with concurrent.futures.ProcessPoolExecutor(max_workers=14) as executor:
+        # Submit tasks and store futures
+        future_to_task = {
+            executor.submit(calculate_ncd_worker, *task): task
+            for task in tasks_to_submit
+        }
+        for future in concurrent.futures.as_completed(future_to_task):
+            result = future.result()
+            if result:
+                compressor, query_stem, db_path, ncd = result
+                results_by_compressor.setdefault(compressor, {}) \
+                    .setdefault(query_stem, []) \
+                    .append((db_path, ncd))
+
+    for query_file in query_files:
+        if query_file.exists():
+            query_file.unlink()
+    
     return results_by_compressor
 
 def rank_results(results_by_compressor: dict[dict[str, list[str, float]]]):
@@ -91,13 +150,26 @@ def rank_results(results_by_compressor: dict[dict[str, list[str, float]]]):
             number_of_best_segments = cur_score[0] + 1
             avg_ncd = (cur_score[1] * cur_score[0] + ncd) / number_of_best_segments
             ranked_results[compressor][song_name] = (number_of_best_segments, avg_ncd)
-    return ranked_results
+    
+    # softmax the scores
+    ranks = {}
+    for compressor, results in ranked_results.items():
+        scores = [(song,result[0]) for song,result in results.items()]
+        softmax_scores = softmax([score[1] for score in scores])
+        for song, score in zip(scores, softmax_scores):
+            ranks.setdefault(compressor, {})[song[0]] = score
+    # Sort the results
+    for compressor, results in ranks.items():
+        sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
+        ranks[compressor] = sorted_results
+        
+    return ranks
         
 def cleanup_temp_files():
     """
     Cleans up temporary files created during processing.
     """
-    log("INFO","Cleaning up temporary files...")
+    log("DEBUG","Cleaning up temporary files...")
     shutil.rmtree(config.TEMP_DIR)
 
 def main():
