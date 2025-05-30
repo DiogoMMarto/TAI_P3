@@ -269,5 +269,3 @@ def process_audio_file(
             segment_path.unlink()
     return True
     
-    
-    

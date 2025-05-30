@@ -158,6 +158,7 @@ def rank_results(results_by_compressor: dict[dict[str, list[str, float]]]):
         softmax_scores = softmax([score[1] for score in scores])
         for song, score in zip(scores, softmax_scores):
             ranks.setdefault(compressor, {})[song[0]] = score
+            
     # Sort the results
     for compressor, results in ranks.items():
         sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
