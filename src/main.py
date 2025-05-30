@@ -19,7 +19,7 @@ def softmax(x):
 def process_database_file(audio_file):
     """Worker function for database processing"""
     try:
-        success = audio_utils.process_audio_file_parallel(audio_file, max_workers=4)
+        success = audio_utils.process_audio_file_parallel(audio_file, max_workers=16)
         return (audio_file.name, success)
     except Exception as e:
         log("ERROR", f"Exception processing {audio_file.name}: {e}")
@@ -94,12 +94,12 @@ def identify_music_parallel(query_audio_path: Path,
 
     # Process query audio
     segment_duration = config.SEGMENT_DURATION if use_segment else 1e9
-    signatures_dir = config.TEMP_DIR / "signatures"
+    signatures_dir = config.TEMP_DIR / "signatures" / query_audio_path.stem
     
     if not audio_utils.process_audio_file_parallel(actual_query_file, 
                                                   segment_duration=segment_duration,
                                                   database_signature_path=signatures_dir,
-                                                  max_workers=4):
+                                                  max_workers=16):
         log("ERROR", "Failed to process query audio")
         return {}
 
@@ -180,7 +180,7 @@ def rank_results_parallel(results_by_compressor: dict) -> dict:
         return compressor, ranked_results
     
     # Parallel ranking across compressors
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(results_by_compressor)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         ranked_by_compressor = dict(executor.map(rank_compressor_results, 
                                                 results_by_compressor.items()))
     
@@ -201,11 +201,7 @@ def rank_results_parallel(results_by_compressor: dict) -> dict:
         
     return final_ranks
 
-def process_multiple_queries_parallel(query_paths: list, max_workers: int = 4):
-    """Process multiple query files in parallel"""
-    log("INFO", f"Processing {len(query_paths)} queries in parallel")
-    
-    def process_single_query(query_path):
+def process_single_query(query_path):
         """Worker function for single query processing"""
         try:
             log("INFO", f"Processing query: {query_path.name}")
@@ -220,8 +216,12 @@ def process_multiple_queries_parallel(query_paths: list, max_workers: int = 4):
         except Exception as e:
             log("ERROR", f"Error processing {query_path.name}: {e}")
             return query_path.name, {}
+
+def process_multiple_queries_parallel(query_paths: list, max_workers: int = 16):
+    """Process multiple query files in parallel"""
+    log("INFO", f"Processing {len(query_paths)} queries in parallel")
     
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(executor.map(process_single_query, query_paths))
     
     return dict(results)
@@ -232,7 +232,7 @@ def main():
     
     try:
         # Parallel database preparation
-        prepare_database_signatures_parallel(max_workers=6)
+        prepare_database_signatures_parallel(max_workers=16)
         
         # Get query files
         if not config.QUERY_SAMPLES_DIR.exists():
@@ -247,7 +247,7 @@ def main():
             return
         
         # Process all queries in parallel
-        all_results = process_multiple_queries_parallel(query_files, max_workers=4)
+        all_results = process_multiple_queries_parallel(query_files, max_workers=16)
         
         # Display results
         for query_name, ranked_results in all_results.items():
