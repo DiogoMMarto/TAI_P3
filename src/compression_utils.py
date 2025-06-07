@@ -1,3 +1,4 @@
+from functools import lru_cache
 import gzip
 import bz2
 import lzma
@@ -5,6 +6,7 @@ import zstandard
 from pathlib import Path
 from log_utils import log
 
+@lru_cache(maxsize=32)
 def get_compressed_size(data_bytes: bytes, compressor_name: str) -> int:
     """
     Compresses data using the specified compressor and returns the size of the compressed data in bytes.
