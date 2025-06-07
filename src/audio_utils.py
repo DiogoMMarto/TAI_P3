@@ -280,23 +280,20 @@ def process_audio_file_parallel(
     """Process audio file with parallel segment processing"""
     log("INFO", f"Processing audio file in parallel: {input_audio_path.name}")
     
-    temp_dir.mkdir(parents=True, exist_ok=True)
     output_audio_path = temp_dir / (input_audio_path.stem + ".wav")
-    signature_dir = database_signature_path / f"{input_audio_path.stem}"
+    signature_path = database_signature_path / f"{input_audio_path.stem}"
     
-    if signature_dir.exists() and any(signature_dir.glob("*.freqs")):
-        log("DEBUG", f"Signatures already exist for {input_audio_path}")
+    if signature_path.exists():
+        log("DEBUG",f"Signature already exists for {input_audio_path}. Skipping processing.")
         return True
     
-    # Convert to WAV format
     if not convert_audio_format(input_audio_path, output_audio_path):
-        log("ERROR", f"Error converting {input_audio_path} to WAV format")
+        log("ERROR",f"Error converting {input_audio_path} to WAV format.")
         return False
     
-    # Get duration and calculate segments
     song_duration_value = song_duration(output_audio_path)
     if song_duration_value is None:
-        log("ERROR", f"Error getting duration for {output_audio_path}")
+        log("ERROR",f"Error getting duration for {output_audio_path}.")
         return False
     
     number_of_segments = int(song_duration_value // segment_duration)
@@ -304,7 +301,7 @@ def process_audio_file_parallel(
         number_of_segments += 1
     
     log("INFO", f"Processing {number_of_segments} segments for {input_audio_path.name}")
-    signature_dir.mkdir(parents=True, exist_ok=True)
+    signature_path.mkdir(parents=True, exist_ok=True)
     
     # Prepare arguments for parallel processing
     segment_args = [
