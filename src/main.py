@@ -29,7 +29,7 @@ def prepare_database_signatures():
 
     for audio_file in config.DATABASE_MUSIC_DIR.iterdir():
         if audio_file.suffix.lower() in ['.wav', '.flac', '.mp3']:
-            success = audio_utils.process_audio_file(audio_file)                
+            success = audio_utils.process_audio_file_parallel(audio_file)                
             if not success:
                 log("ERROR",f"Failed to generate signatures for {audio_file.name}")
         else:
@@ -85,7 +85,7 @@ def identify_music(query_audio_path: Path,
         segment_duration = 1e9
 
     signatures_of_query_dir = config.TEMP_DIR / f"signatures"
-    if not audio_utils.process_audio_file(actual_query_file, 
+    if not audio_utils.process_audio_file_parallel(actual_query_file, 
                                           segment_duration=segment_duration, 
                                           database_signature_path=signatures_of_query_dir):
         log("ERROR","Failed to process audio file.")
@@ -158,6 +158,7 @@ def rank_results(results_by_compressor: dict[dict[str, list[str, float]]]):
         softmax_scores = softmax([score[1] for score in scores])
         for song, score in zip(scores, softmax_scores):
             ranks.setdefault(compressor, {})[song[0]] = score
+            
     # Sort the results
     for compressor, results in ranks.items():
         sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
