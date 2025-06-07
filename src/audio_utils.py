@@ -10,28 +10,47 @@ def generate_signature(audio_path: Path, signature_path: Path, verbose: bool = F
                        sh: int = config.GMF_SHIFT,
                        ds: int = config.GMF_DOWNSAMPLING,
                        nf: int = config.GMF_NUM_FREQS) -> bool:
-    """Generate frequency signature using GetMaxFreqs"""
+    """
+    Generates a frequency signature file from an audio file using GetMaxFreqs.
+    Returns True on success, False on failure.
+    """
     if not config.GETMAXFREQS_EXE.exists():
-        log("ERROR", f"GetMaxFreqs executable not found at {config.GETMAXFREQS_EXE}")
+        log("ERROR",f"Error: GetMaxFreqs executable not found at {config.GETMAXFREQS_EXE}")
         return False
-    
-    signature_path.parent.mkdir(parents=True, exist_ok=True)
-    
+    if not audio_path.exists():
+        log("ERROR",f"Error: Audio file not found at {audio_path}")
+        return False
+
     cmd = [
-         str(config.GETMAXFREQS_EXE),
-         "-w", str(signature_path),
-         "-ws", str(ws),
-         "-sh", str(sh),
-         "-ds", str(ds),
-         "-nf", str(nf),
-         str(audio_path)
-     ]
-    
+        str(config.GETMAXFREQS_EXE),
+        "-w", str(signature_path),
+        "-ws", str(ws),
+        "-sh", str(sh),
+        "-ds", str(ds),
+        "-nf", str(nf),
+        str(audio_path)
+    ]
+    if verbose:
+        cmd.insert(1, "-v")
+    log("DEBUG",f"Running GetMaxFreqs: {' '.join(cmd)}")
+
     try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        process = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        if verbose and process.stdout:
+            log("INFO","GetMaxFreqs STDOUT:", process.stdout)
+        if process.stderr:
+            log("ERROR","GetMaxFreqs STDERR:", process.stderr)
+            return False
         return True
     except subprocess.CalledProcessError as e:
-        log("ERROR", f"GetMaxFreqs failed for {audio_path}: {e.stderr}")
+        log("ERROR",f"Error running GetMaxFreqs for {audio_path}:")
+        log("ERROR","Command:", ' '.join(e.cmd))
+        log("ERROR","Return code:", e.returncode)
+        log("ERROR","STDOUT:", e.stdout)
+        log("ERROR","STDERR:", e.stderr)
+        return False
+    except FileNotFoundError:
+        log("ERROR",f"Error: GetMaxFreqs command '{config.GETMAXFREQS_EXE}' not found. Is it in your PATH or correctly specified in config.py?")
         return False
 
 
