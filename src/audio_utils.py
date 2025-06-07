@@ -17,9 +17,15 @@ def generate_signature(audio_path: Path, signature_path: Path, verbose: bool = F
     
     signature_path.parent.mkdir(parents=True, exist_ok=True)
     
-    cmd = [str(config.GETMAXFREQS_EXE), "-w", str(signature_path),
-           "-ws", str(ws), "-sh", str(sh), "-ds", str(ds), "-nf", str(nf),
-           str(audio_path)]
+    cmd = [
+         str(config.GETMAXFREQS_EXE),
+         "-w", str(signature_path),
+         "-ws", str(ws),
+         "-sh", str(sh),
+         "-ds", str(ds),
+         "-nf", str(nf),
+         str(audio_path)
+     ]
     
     try:
         subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -48,8 +54,13 @@ def extract_segment(input_audio_path: Path, output_segment_path: Path,
 
 def convert_audio_format(input_audio_path: Path, output_audio_path: Path) -> bool:
     """Convert audio to WAV format using SoX"""
-    cmd = [str(config.SOX_EXE), str(input_audio_path), str(output_audio_path),
-           "rate", "44100", "channels", "2"]
+    cmd = [
+         str(config.SOX_EXE),
+         str(input_audio_path),
+         str(output_audio_path),
+         "rate", "44100",
+         "channels", "2",
+     ]
     
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -60,32 +71,82 @@ def convert_audio_format(input_audio_path: Path, output_audio_path: Path) -> boo
 
 def add_noise(input_audio_path: Path, output_noisy_audio_path: Path,
               noise_type: str = "whitenoise", noise_level: float = 0.005) -> bool:
-    """Add noise to audio file using SoX"""
-    # Implementation from the provided code
-    duration = song_duration(input_audio_path)
-    if duration is None:
+    """
+    Adds noise to an audio file using SoX, ensuring sample rate and channel compatibility.
+    Example noise_types: 'whitenoise', 'pinknoise', 'brownnoise'
+    Returns True on success, False on failure.
+    """
+    if not shutil.which(str(config.SOX_EXE)):
+        log("ERROR", f"Error: SoX executable not found at '{config.SOX_EXE}'. Please install SoX or check config.py.")
         return False
-    
-    temp_noise_file = config.TEMP_DIR / f"temp_noise_{input_audio_path.stem}.wav"
-    
-    cmd_gen_noise = [str(config.SOX_EXE), "-n", str(temp_noise_file),
-                     "synth", str(duration), noise_type, "vol", str(noise_level),
-                     "rate", "44100", "channels", "2"]
-    cmd_mix_noise = [str(config.SOX_EXE), "-m", str(input_audio_path), 
-                     str(temp_noise_file), str(output_noisy_audio_path)]
-    
-    try:
-        subprocess.run(cmd_gen_noise, check=True, capture_output=True, text=True)
-        subprocess.run(cmd_mix_noise, check=True, capture_output=True, text=True)
-        if temp_noise_file.exists():
-            temp_noise_file.unlink()
-        return True
-    except subprocess.CalledProcessError as e:
-        log("ERROR", f"Noise addition failed: {e.stderr}")
-        if temp_noise_file.exists():
-            temp_noise_file.unlink()
+    if not input_audio_path.exists():
+        log("ERROR", f"Error: Input audio file not found at {input_audio_path}")
+        return False
+    if not output_noisy_audio_path.parent.exists():
+        log("ERROR", f"Error: Output directory for {output_noisy_audio_path} does not exist.")
         return False
 
+    duration = 0.0
+    sample_rate = None
+    channels = None
+    try:
+        info_duration_cmd = [str(config.SOX_EXE), "--i", "-D", str(input_audio_path)]
+        duration_str = subprocess.run(info_duration_cmd, check=True, capture_output=True, text=True).stdout.strip()
+        duration = float(duration_str)
+
+        info_full_cmd = [str(config.SOX_EXE), "--info", str(input_audio_path)]
+        info_output = subprocess.run(info_full_cmd, check=True, capture_output=True, text=True).stdout
+
+        for line in info_output.splitlines():
+            if "Sample Rate" in line:
+                sample_rate = int(line.split(":")[-1].strip().split()[0])
+            elif "Channels" in line:
+                channels = int(line.split(":")[-1].strip())
+        
+        if sample_rate is None or channels is None:
+            log("ERROR", f"Could not determine sample rate or channels for {input_audio_path}")
+            return False
+
+    except Exception as e:
+        log("ERROR", f"Could not get audio properties for {input_audio_path}: {e}")
+        return False
+
+    log("INFO", f"Input audio properties for {input_audio_path}: Duration={duration}s, Sample Rate={sample_rate}Hz, Channels={channels}")
+
+    config.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    temp_noise_file = config.TEMP_DIR / f"temp_noise_{input_audio_path.stem}.wav"
+
+    cmd_gen_noise = [
+        str(config.SOX_EXE), "-n", str(temp_noise_file),
+        "synth", str(duration), noise_type,
+        "vol", str(noise_level),
+        "rate", str(sample_rate),
+        "channels", str(channels)  
+    ]
+    cmd_mix_noise = [
+        str(config.SOX_EXE), "-m", str(input_audio_path), str(temp_noise_file), str(output_noisy_audio_path)
+    ]
+
+    log("INFO", f"Running SoX (generate noise): {' '.join(cmd_gen_noise)}")
+    try:
+        subprocess.run(cmd_gen_noise, check=True, capture_output=True, text=True)
+        log("INFO", f"Running SoX (mix noise): {' '.join(cmd_mix_noise)}")
+        subprocess.run(cmd_mix_noise, check=True, capture_output=True, text=True)
+        
+        if temp_noise_file.exists():
+            temp_noise_file.unlink() 
+        return True
+    except subprocess.CalledProcessError as e:
+        log("ERROR", f"Error running SoX for noise addition on {input_audio_path}:")
+        log("ERROR", "STDOUT:", e.stdout)
+        log("ERROR", "STDERR:", e.stderr)
+        if temp_noise_file.exists():
+            temp_noise_file.unlink()
+        return False
+    except FileNotFoundError:
+        log("ERROR", f"Error: SoX command '{config.SOX_EXE}' not found.")
+        return False
+    
 def song_duration(input_audio_path: Path) -> float | None:
     """Get audio file duration using SoX"""
     cmd = [str(config.SOX_EXE), "--i", "-D", str(input_audio_path)]
