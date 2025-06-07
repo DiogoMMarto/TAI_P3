@@ -40,7 +40,7 @@ def calculate_ncd_worker(
     signature_file: Path,
     db_signature_file: Path,
     compressor: str
-) -> Tuple[str, str, str, float] | None:
+) -> Tuple[str, str, str, float ] | None:
     """
     Worker function to calculate NCD for a single pair of files.
     """
@@ -51,6 +51,9 @@ def calculate_ncd_worker(
         db_signature_dir_name = db_signature_file.parent.name
         query_stem = signature_file.stem
         db_path = f"{db_signature_dir_name}/{db_signature_file.stem}"
+        if ncd is None:
+            log("ERROR", f"Failed to calculate NCD for {signature_file.name} vs {db_signature_file.name} with {compressor}.")
+            return None
         return (compressor, query_stem, db_path, ncd)
     except Exception as e:
         log("ERROR", f"Failed NCD: {signature_file.name} vs "
@@ -72,10 +75,10 @@ def identify_music(query_audio_path: Path,
 
     actual_query_file = query_audio_path
 
-    if add_noise_flag:
+    if add_noise_flag and noise_params:
         noisy_segment_path = config.TEMP_DIR / f"{query_audio_path.stem}_noisy.wav"
         log("INFO",f"Adding noise to {query_audio_path.name}")
-        if not audio_utils.add_noise(query_audio_path, noisy_segment_path, noise_params):
+        if not audio_utils.add_noise(query_audio_path, noisy_segment_path, noise_params["noise_level"], noise_params["noise_type"]):
             log("ERROR","Failed to add noise.")
             return {}
         actual_query_file = noisy_segment_path
@@ -91,7 +94,7 @@ def identify_music(query_audio_path: Path,
         log("ERROR","Failed to process audio file.")
         return {}
 
-    results_by_compressor: dict[str,dict[str, tuple[str, float]]] = {}
+    results_by_compressor: dict[str,dict[str, list[tuple[str, float]]]] = {}
 
     tasks_to_submit = []
 
@@ -134,7 +137,7 @@ def identify_music(query_audio_path: Path,
     
     return results_by_compressor
 
-def rank_results(results_by_compressor: dict[dict[str, list[str, float]]]):
+def rank_results(results_by_compressor: dict[str,dict[str, list[tuple[str, float]]]]):
     """
     Ranks the results based on NCD values.
     """
