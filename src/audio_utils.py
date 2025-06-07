@@ -33,7 +33,7 @@ def process_audio_file_parallel(
     segment_duration: float = config.SEGMENT_DURATION,
     database_signature_path: Path = config.DATABASE_SIGNATURES_DIR,
     temp_dir: Path = config.TEMP_DIR,
-    max_workers: int = 4
+    max_workers: int = 8
 ) -> bool:
     """Process audio file with parallel segment processing"""
     log("INFO", f"Processing audio file in parallel: {input_audio_path.name}")
