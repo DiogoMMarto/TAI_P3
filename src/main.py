@@ -91,7 +91,7 @@ def identify_music(query_audio_path: Path,
         log("ERROR","Failed to process audio file.")
         return {}
 
-    results_by_compressor: dict[dict[str, list[str, float]]] = {}
+    results_by_compressor: dict[str,dict[str, tuple[str, float]]] = {}
 
     tasks_to_submit = []
 
