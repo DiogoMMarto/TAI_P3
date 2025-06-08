@@ -185,6 +185,7 @@ def main():
     for query_file_path in config.QUERY_SAMPLES_DIR.iterdir():
         if query_file_path.suffix.lower() in ['.wav', '.flac', '.mp3']:
             log("INFO",f"Processing query file: {query_file_path.name}")
+            
             ranks = identify_music(query_file_path)
             p = rank_results(ranks)
             log("INFO",f"Ranked results for {query_file_path.name}: {p}")
@@ -195,3 +196,4 @@ def main():
     
 if __name__ == "__main__":
     main()
+    
