@@ -8,7 +8,6 @@ from log_utils import log
 from main import identify_music , prepare_database_signatures , rank_results
 from config import QUERY_SAMPLES_DIR , TEMP_DIR, COMPRESSORS , DATABASE_SIGNATURES_DIR , DATABASE_MUSIC_DIR
 from audio_utils import add_noise
-from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 
 def parse_noise_levels(noise_args):
