@@ -118,7 +118,7 @@ def identify_music(query_audio_path: Path,
 
     log("INFO", f"Total NCD calculations to perform: {len(tasks_to_submit)}")
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         future_to_task = {
             executor.submit(calculate_ncd_worker, *task): task
             for task in tasks_to_submit
