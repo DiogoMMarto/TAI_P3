@@ -102,7 +102,7 @@ def main():
                 log("WARNING", f"No results for compressor {compressor} at noise level {noise_level}.")
                 continue
 
-            report = classification_report(y_true, y_pred, output_dict=True, zero_division=0)
+            report: dict = classification_report(y_true, y_pred, output_dict=True, zero_division=0) # type: ignore
             accuracies_by_compressor[compressor].append(report["accuracy"])
             f1_scores_by_compressor[compressor].append(report["weighted avg"]["f1-score"])
 
