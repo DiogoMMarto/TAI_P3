@@ -24,13 +24,13 @@ QUERY_SAMPLES_DIR = BASE_DIR / "query"
 TEMP_DIR = BASE_DIR / "temp" 
 
 # --- GetMaxFreqs Parameters (from C++ defaults) ---
-GMF_WINDOW_SIZE = 1024    # -ws option
+GMF_WINDOW_SIZE = 2048    # -ws option
 GMF_SHIFT = 256           # -sh option
 GMF_DOWNSAMPLING = 4      # -ds option
 GMF_NUM_FREQS = 4         # -nf option
 
 # --- Compressors ---
-COMPRESSORS = ["zstd"]# ["gzip", "bzip2", "lzma", "zstd"]
+COMPRESSORS = ["gzip", "bzip2", "lzma", "zstd"]
 
 # --- Parameters ---
 SEGMENT_DURATION = 10

@@ -14,7 +14,7 @@ def get_compressed_size(data_bytes: bytes, compressor_name: str , id: str | None
     Supported compressors: 'gzip', 'bzip2', 'lzma', 'zstd'.
     """
     if id and id in cs_cache:
-        return cs_cache[id]
+        return cs_cache[(id, compressor_name)]
     compressed_data = None
     if compressor_name == "gzip":
         compressed_data = gzip.compress(data_bytes)
@@ -28,7 +28,7 @@ def get_compressed_size(data_bytes: bytes, compressor_name: str , id: str | None
     else:
         raise ValueError(f"Unsupported compressor: {compressor_name}. Supported: gzip, bzip2, lzma, zstd.")
     if id:
-        cs_cache[id] = len(compressed_data)
+        cs_cache[(id, compressor_name)] = len(compressed_data)
     return len(compressed_data)
 
 def calculate_ncd(signature_file_x_path: Path, signature_file_y_path: Path, compressor_name: str) -> float | None:

@@ -69,14 +69,18 @@ def identify_music(query_audio_path: Path,
     Identifies a query audio by comparing its NCD against the database signatures
     """
     log("INFO",f"--- Identifying Music for Query: {query_audio_path.name} ---")
+    
+    noisy_segment_path = config.TEMP_DIR / f"{query_audio_path.stem}_noisy.wav"
+    actual_query_file = query_audio_path
+    signatures_of_query_dir = config.TEMP_DIR / f"signatures"
+    signatures_of_query_dir_2 = signatures_of_query_dir / query_audio_path.stem
+    log("INFO",f"Signatures directory for query: {signatures_of_query_dir}")
+    
     if not query_audio_path.exists():
         log("ERROR",f"Query audio file not found: {query_audio_path}")
         return {}
 
-    actual_query_file = query_audio_path
-
     if add_noise_flag and noise_params:
-        noisy_segment_path = config.TEMP_DIR / f"{query_audio_path.stem}_noisy.wav"
         log("INFO",f"Adding noise to {query_audio_path.name}")
         if not audio_utils.add_noise(query_audio_path, noisy_segment_path, noise_params["noise_level"], noise_params["noise_type"]):
             log("ERROR","Failed to add noise.")
@@ -87,7 +91,6 @@ def identify_music(query_audio_path: Path,
     if not use_segment:
         segment_duration = 1e9
 
-    signatures_of_query_dir = config.TEMP_DIR / f"signatures"
     if not audio_utils.process_audio_file_parallel(actual_query_file, 
                                           segment_duration=segment_duration, 
                                           database_signature_path=signatures_of_query_dir):
@@ -98,7 +101,7 @@ def identify_music(query_audio_path: Path,
 
     tasks_to_submit = []
 
-    query_files = list(signatures_of_query_dir.rglob("*.freqs"))
+    query_files = list(signatures_of_query_dir_2.rglob("*.freqs"))
     db_files = []
     for db_signature_dir in config.DATABASE_SIGNATURES_DIR.iterdir():
         if db_signature_dir.is_dir():
@@ -115,10 +118,7 @@ def identify_music(query_audio_path: Path,
 
     log("INFO", f"Total NCD calculations to perform: {len(tasks_to_submit)}")
 
-    # Execute tasks in parallel
-    # You can adjust max_workers. None usually means using all available CPU cores.
-    with concurrent.futures.ProcessPoolExecutor(max_workers=14) as executor:
-        # Submit tasks and store futures
+    with concurrent.futures.ThreadPoolExecutor() as executor:
         future_to_task = {
             executor.submit(calculate_ncd_worker, *task): task
             for task in tasks_to_submit
@@ -131,13 +131,15 @@ def identify_music(query_audio_path: Path,
                     .setdefault(query_stem, []) \
                     .append((db_path, ncd))
 
-    for query_file in query_files:
-        if query_file.exists():
-            query_file.unlink()
+    # remove everything in signatures_of_query_dir
+    for signature_file in signatures_of_query_dir_2.iterdir():
+        if signature_file.is_file():
+            signature_file.unlink()
+    signatures_of_query_dir_2.rmdir()
     
     return results_by_compressor
 
-def rank_results(results_by_compressor: dict[str,dict[str, list[tuple[str, float]]]]):
+def rank_results(results_by_compressor: dict[str,dict[str, list[tuple[str, float]]]]) -> dict[str, list[tuple[str, float]]]:
     """
     Ranks the results based on NCD values.
     """
