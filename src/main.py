@@ -220,14 +220,14 @@ def load_frequencies(file_path: Path, nf: int):
         content = f.read()
     return [content[i:i+nf] for i in range(0, len(content), nf)]
 
-def vectors_from_frequencies(indices, nf):
+def vectors_from_frequencies(indices):
     return np.array([[int(byte) for byte in segment] for segment in indices])
 
 def build_annoy_index(db_files: list[Path], nf: int):
     index = AnnoyIndex(nf, 'euclidean')
     for i, db_file in enumerate(db_files):
         indices = load_frequencies(db_file, nf)
-        vectors = vectors_from_frequencies(indices, nf)
+        vectors = vectors_from_frequencies(indices)
         for vector in vectors:
             index.add_item(i, vector)
     index.build(10)
