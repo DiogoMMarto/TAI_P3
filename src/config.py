@@ -27,7 +27,7 @@ TEMP_DIR = BASE_DIR / "temp"
 GMF_WINDOW_SIZE = 3192    # -ws option
 GMF_SHIFT = 512           # -sh option
 GMF_DOWNSAMPLING = 4      # -ds option
-GMF_NUM_FREQS = 2         # -nf option
+GMF_NUM_FREQS = 3         # -nf option
 
 # --- Compressors ---
 COMPRESSORS = ["bzip2"]#["gzip", "bzip2", "lzma", "zstd"]
