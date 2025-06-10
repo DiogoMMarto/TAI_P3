@@ -297,7 +297,7 @@ def process_audio_file_parallel(
         return False
     
     number_of_segments = int(song_duration_value // segment_duration)
-    if song_duration_value % segment_duration > 0:
+    if song_duration_value % segment_duration > 1:
         number_of_segments += 1
     
     log("INFO", f"Processing {number_of_segments} segments for {input_audio_path.name}")

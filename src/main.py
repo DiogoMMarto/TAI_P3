@@ -118,33 +118,21 @@ def identify_music(query_audio_path: Path,
         return {}
 
     results_by_compressor = {}
-
     query_files = list(signatures_of_query_dir_2.rglob("*.freqs"))
-    query_to_db_nearest = {qf: [] for qf in query_files}
-    query_data_map = {}
+    log("INFO", f"Found {len(query_files)} query signature files.")
 
-    # Process query files
+    # Process each query file
+    tasks_to_submit = []
     for query_file in query_files:
         query_indices = load_frequencies(query_file, config.GMF_NUM_FREQS)
-        query_vectors = vectors_from_frequencies(query_indices)
-        query_data_map[query_file] = query_vectors
-
-    # Map DB to pre-read data
-    db_data_map = {db_file: vectors_from_frequencies(load_frequencies(db_file, config.GMF_NUM_FREQS)) for db_file in db_files}
-
-    # Find nearest neighbors using Annoy
-    for query_file, query_vectors in query_data_map.items():
-        for query_vector in query_vectors:
-            nearest_neighbors = db_annoy_index.get_nns_by_vector(query_vector, 20)
-            query_to_db_nearest[query_file].extend([db_files[i] for i in nearest_neighbors])
-
-    tasks_to_submit = []
-    for query_file, nearest_db_files in query_to_db_nearest.items():
-        query_data = b''.join(query_data_map[query_file])
-        for db_signature_file in nearest_db_files:
-            db_data = b''.join(db_data_map[db_signature_file])
+        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 15)
+        for neighbor_id in nearest_neighbors:
+            db_signature_file = db_files[neighbor_id]
+            # print(f"Processing {query_file} against {db_signature_file}")
+            db_data = load_frequencies(db_signature_file, config.GMF_NUM_FREQS)
             for compressor in config.COMPRESSORS:
-                tasks_to_submit.append((query_data, str(query_file), db_data, str(db_signature_file), compressor))
+                if (query_indices, str(query_file), db_data, str(db_signature_file), compressor) not in tasks_to_submit:
+                    tasks_to_submit.append((query_indices, str(query_file), db_data, str(db_signature_file), compressor))
 
     log("INFO", f"Total NCD calculations to perform: {len(tasks_to_submit)}")
 
@@ -211,18 +199,14 @@ def cleanup_temp_files():
 def load_frequencies(file_path: Path, nf: int):
     with open(file_path, 'rb') as f:
         content = f.read()
-    return [content[i:i+nf] for i in range(0, len(content), nf)]
-
-def vectors_from_frequencies(indices):
-    return np.array([[int(byte) for byte in segment] for segment in indices])
+    # print(f"Loading {file_path}, content length: {len(content)}")
+    return [content[i] for i in range(nf)]
 
 def build_annoy_index(db_files: list[Path], nf: int = config.GMF_NUM_FREQS):
     index = AnnoyIndex(nf, 'euclidean')
     for i, db_file in enumerate(db_files):
         indices = load_frequencies(db_file, nf)
-        vectors = vectors_from_frequencies(indices)
-        for vector in vectors:
-            index.add_item(i, vector)
+        index.add_item(i, indices)
     index.build(10)
     return index
 
@@ -239,8 +223,9 @@ def main():
 
     log("INFO", f"Building Annoy index for {len(db_files)} DB files.")
     db_annoy_index = build_annoy_index(db_files)
+
     for query_file_path in config.QUERY_SAMPLES_DIR.iterdir():
-        if query_file_path.suffix.lower() in ['.wav', '.flac', '.mp3']:
+        if query_file_path.suffix.lower() in ['.wav', '.flac', '.mp3'] and query_file_path.name.startswith("link"):
             log("INFO",f"Processing query file: {query_file_path.name}")
             
             ranks = identify_music(query_file_path, db_annoy_index, db_files)
