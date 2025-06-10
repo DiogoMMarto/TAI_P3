@@ -85,10 +85,11 @@ def calculate_ncd_worker(
         return None
     
 def identify_music(query_audio_path: Path,
+                   db_annoy_index: AnnoyIndex,
+                   db_files: list[Path],
                    use_segment: bool = True,
                    add_noise_flag: bool = False,
-                   noise_params: dict | None = None,
-                   nf: int = config.GMF_NUM_FREQS):
+                   noise_params: dict | None = None,) -> dict[str, dict[str, list[tuple[str, float]]]]:
     
     log("INFO", f"--- Identifying Music for Query: {query_audio_path.name} ---")
     
@@ -119,25 +120,17 @@ def identify_music(query_audio_path: Path,
     results_by_compressor = {}
 
     query_files = list(signatures_of_query_dir_2.rglob("*.freqs"))
-    db_files = []
-    for db_signature_dir in config.DATABASE_SIGNATURES_DIR.iterdir():
-        if db_signature_dir.is_dir():
-            db_files.extend(list(db_signature_dir.rglob("*.freqs")))
-
-    log("INFO", f"Building Annoy index for {len(db_files)} DB files.")
-    db_annoy_index = build_annoy_index(db_files, nf)
-
     query_to_db_nearest = {qf: [] for qf in query_files}
     query_data_map = {}
 
     # Process query files
     for query_file in query_files:
-        query_indices = load_frequencies(query_file, nf)
+        query_indices = load_frequencies(query_file, config.GMF_NUM_FREQS)
         query_vectors = vectors_from_frequencies(query_indices)
         query_data_map[query_file] = query_vectors
 
     # Map DB to pre-read data
-    db_data_map = {db_file: vectors_from_frequencies(load_frequencies(db_file, nf)) for db_file in db_files}
+    db_data_map = {db_file: vectors_from_frequencies(load_frequencies(db_file, config.GMF_NUM_FREQS)) for db_file in db_files}
 
     # Find nearest neighbors using Annoy
     for query_file, query_vectors in query_data_map.items():
@@ -223,7 +216,7 @@ def load_frequencies(file_path: Path, nf: int):
 def vectors_from_frequencies(indices):
     return np.array([[int(byte) for byte in segment] for segment in indices])
 
-def build_annoy_index(db_files: list[Path], nf: int):
+def build_annoy_index(db_files: list[Path], nf: int = config.GMF_NUM_FREQS):
     index = AnnoyIndex(nf, 'euclidean')
     for i, db_file in enumerate(db_files):
         indices = load_frequencies(db_file, nf)
@@ -239,11 +232,18 @@ def main():
     # """
     log("INFO","--- Starting Music Identification Script ---")
     prepare_database_signatures()
+    db_files = []
+    for db_signature_dir in config.DATABASE_SIGNATURES_DIR.iterdir():
+        if db_signature_dir.is_dir():
+            db_files.extend(list(db_signature_dir.rglob("*.freqs")))
+
+    log("INFO", f"Building Annoy index for {len(db_files)} DB files.")
+    db_annoy_index = build_annoy_index(db_files)
     for query_file_path in config.QUERY_SAMPLES_DIR.iterdir():
         if query_file_path.suffix.lower() in ['.wav', '.flac', '.mp3']:
             log("INFO",f"Processing query file: {query_file_path.name}")
             
-            ranks = identify_music(query_file_path)
+            ranks = identify_music(query_file_path, db_annoy_index, db_files)
             p = rank_results(ranks)
             log("INFO",f"Ranked results for {query_file_path.name}: {p}")
         else:
