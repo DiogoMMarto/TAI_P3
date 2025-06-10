@@ -8,11 +8,7 @@ from log_utils import log
 
 cs_cache = {}
 # @lru_cache(maxsize=32)
-def get_compressed_size(data_bytes: bytes, compressor_name: str , id: str | None) -> int:
-    """
-    Compresses data using the specified compressor and returns the size of the compressed data in bytes.
-    Supported compressors: 'gzip', 'bzip2', 'lzma', 'zstd'.
-    """
+def get_compressed_size(data_bytes: bytes, compressor_name: str, id: str | None) -> int:
     if id and id in cs_cache:
         return cs_cache[(id, compressor_name)]
     compressed_data = None
@@ -31,24 +27,30 @@ def get_compressed_size(data_bytes: bytes, compressor_name: str , id: str | None
         cs_cache[(id, compressor_name)] = len(compressed_data)
     return len(compressed_data)
 
-def calculate_ncd(signature_file_x_path: Path, signature_file_y_path: Path, compressor_name: str) -> float | None:
-    """
-    Calculates the Normalized Compression Distance (NCD) between two signature files. [cite: 2]
-    NCD(x,y) = (C(xy) - min(C(x), C(y))) / max(C(x), C(y))
-    Returns the NCD value, or None if an error occurs.
-    """
+def calculate_ncd_from_file_paths(signature_file_x_path: Path, signature_file_y_path: Path, compressor_name: str) -> float | None:
     try:
         with open(signature_file_x_path, 'rb') as f:
             data_x = f.read()
         with open(signature_file_y_path, 'rb') as f:
             data_y = f.read()
 
-        c_x = get_compressed_size(data_x, compressor_name, str(signature_file_x_path))
-        c_y = get_compressed_size(data_y, compressor_name , str(signature_file_y_path))
+        return calculate_ncd_from_data(data_x, str(signature_file_x_path), data_y, str(signature_file_y_path), compressor_name)
 
-        # Concatenate data_x and data_y for C(xy) [cite: 2]
+    except FileNotFoundError:
+        log("ERROR", f"Error: One or both signature files not found: {signature_file_x_path}, {signature_file_y_path}")
+        return None
+    except Exception as e:
+        log("ERROR", f"Error calculating NCD for {signature_file_x_path} and {signature_file_y_path} using {compressor_name}: {e}")
+        return None
+
+def calculate_ncd_from_data(data_x: bytes, x_file_path: str, data_y: bytes, y_file_path: str, compressor_name: str) -> float | None:
+    try:
+        c_x = get_compressed_size(data_x, compressor_name, x_file_path)
+        c_y = get_compressed_size(data_y, compressor_name, y_file_path)
+
+        # Concatenate data_x and data_y for C(xy)
         data_xy = data_x + data_y
-        c_xy = get_compressed_size(data_xy, compressor_name , None)
+        c_xy = get_compressed_size(data_xy, compressor_name, None)
 
         min_c = min(c_x, c_y)
         max_c = max(c_x, c_y)
@@ -59,9 +61,6 @@ def calculate_ncd(signature_file_x_path: Path, signature_file_y_path: Path, comp
         ncd = (c_xy - min_c) / max_c
         return ncd
 
-    except FileNotFoundError:
-        log("ERROR",f"Error: One or both signature files not found: {signature_file_x_path}, {signature_file_y_path}")
-        return None
     except Exception as e:
-        log("ERROR",f"Error calculating NCD for {signature_file_x_path} and {signature_file_y_path} using {compressor_name}: {e}")
+        log("ERROR", f"Error calculating NCD from data: {x_file_path} vs {y_file_path} using {compressor_name}: {e}")
         return None

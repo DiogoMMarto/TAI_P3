@@ -11,6 +11,9 @@ import audio_utils
 import compression_utils
 from log_utils import log
 
+from annoy import AnnoyIndex
+import numpy as np
+
 def softmax(x):
     max_x = max(x)
     exp_x = [exp(i-max_x) for i in x]
@@ -36,7 +39,7 @@ def prepare_database_signatures():
             log("WARNING",f"Skipping non-audio file: {audio_file.name}")
     log("INFO","--- Database Signature Preparation Complete ---")
 
-def calculate_ncd_worker(
+def calculate_ncd_worker_from_file_paths(
     signature_file: Path,
     db_signature_file: Path,
     compressor: str
@@ -45,9 +48,7 @@ def calculate_ncd_worker(
     Worker function to calculate NCD for a single pair of files.
     """
     try:
-        ncd = compression_utils.calculate_ncd(
-            signature_file, db_signature_file, compressor
-        )
+        ncd = compression_utils.calculate_ncd_from_file_paths(signature_file, db_signature_file, compressor)
         db_signature_dir_name = db_signature_file.parent.name
         query_stem = signature_file.stem
         db_path = f"{db_signature_dir_name}/{db_signature_file.stem}"
@@ -60,46 +61,62 @@ def calculate_ncd_worker(
                    f"{db_signature_file.name} with {compressor}. Error: {e}")
         return None
 
+def calculate_ncd_worker(
+    query_data: bytes,
+    query_file_path: str,
+    db_data: bytes,
+    db_file_path: str,
+    compressor: str
+) -> Tuple[str, str, str, float] | None:
+    """
+    Worker function to calculate NCD for pre-read data.
+    """
+    try:
+        ncd = compression_utils.calculate_ncd_from_data(query_data, query_file_path, db_data, db_file_path, compressor)
+        db_signature_dir_name = Path(db_file_path).parent.name
+        query_stem = Path(query_file_path).stem
+        db_path = f"{db_signature_dir_name}/{Path(db_file_path).stem}"
+        if ncd is None:
+            log("ERROR", f"Failed to calculate NCD for {query_file_path} vs {db_file_path} with {compressor}.")
+            return None
+        return (compressor, query_stem, db_path, ncd)
+    except Exception as e:
+        log("ERROR", f"Failed NCD: {query_file_path} vs {db_file_path} with {compressor}. Error: {e}")
+        return None
+    
 def identify_music(query_audio_path: Path,
                    use_segment: bool = True,
                    add_noise_flag: bool = False,
-                   noise_params: dict | None = None
-                   ):
-    """
-    Identifies a query audio by comparing its NCD against the database signatures
-    """
-    log("INFO",f"--- Identifying Music for Query: {query_audio_path.name} ---")
+                   noise_params: dict | None = None,
+                   nf: int = config.GMF_NUM_FREQS):
+    
+    log("INFO", f"--- Identifying Music for Query: {query_audio_path.name} ---")
     
     noisy_segment_path = config.TEMP_DIR / f"{query_audio_path.stem}_noisy.wav"
     actual_query_file = query_audio_path
     signatures_of_query_dir = config.TEMP_DIR / f"signatures"
     signatures_of_query_dir_2 = signatures_of_query_dir / query_audio_path.stem
-    log("INFO",f"Signatures directory for query: {signatures_of_query_dir}")
-    
+
     if not query_audio_path.exists():
-        log("ERROR",f"Query audio file not found: {query_audio_path}")
+        log("ERROR", f"Query audio file not found: {query_audio_path}")
         return {}
 
     if add_noise_flag and noise_params:
-        log("INFO",f"Adding noise to {query_audio_path.name}")
+        log("INFO", f"Adding noise to {query_audio_path.name}")
         if not audio_utils.add_noise(query_audio_path, noisy_segment_path, noise_params["noise_level"], noise_params["noise_type"]):
-            log("ERROR","Failed to add noise.")
+            log("ERROR", "Failed to add noise.")
             return {}
         actual_query_file = noisy_segment_path
 
-    segment_duration = config.SEGMENT_DURATION
-    if not use_segment:
-        segment_duration = 1e9
+    segment_duration = config.SEGMENT_DURATION if use_segment else 1e9
 
     if not audio_utils.process_audio_file_parallel(actual_query_file, 
-                                          segment_duration=segment_duration, 
-                                          database_signature_path=signatures_of_query_dir):
-        log("ERROR","Failed to process audio file.")
+                                                   segment_duration=segment_duration, 
+                                                   database_signature_path=signatures_of_query_dir):
+        log("ERROR", "Failed to process query audio file.")
         return {}
 
-    results_by_compressor: dict[str,dict[str, list[tuple[str, float]]]] = {}
-
-    tasks_to_submit = []
+    results_by_compressor = {}
 
     query_files = list(signatures_of_query_dir_2.rglob("*.freqs"))
     db_files = []
@@ -107,14 +124,34 @@ def identify_music(query_audio_path: Path,
         if db_signature_dir.is_dir():
             db_files.extend(list(db_signature_dir.rglob("*.freqs")))
 
-    log("INFO", f"Found {len(query_files)} query files and {len(db_files)} DB files.")
+    log("INFO", f"Building Annoy index for {len(db_files)} DB files.")
+    db_annoy_index = build_annoy_index(db_files, nf)
 
-    for compressor in config.COMPRESSORS:
-        for signature_file in query_files:
-            for db_signature_file in db_files:
-                tasks_to_submit.append(
-                    (signature_file, db_signature_file, compressor)
-                )
+    query_to_db_nearest = {qf: [] for qf in query_files}
+    query_data_map = {}
+
+    # Process query files
+    for query_file in query_files:
+        query_indices = load_frequencies(query_file, nf)
+        query_vectors = vectors_from_frequencies(query_indices)
+        query_data_map[query_file] = query_vectors
+
+    # Map DB to pre-read data
+    db_data_map = {db_file: vectors_from_frequencies(load_frequencies(db_file, nf)) for db_file in db_files}
+
+    # Find nearest neighbors using Annoy
+    for query_file, query_vectors in query_data_map.items():
+        for query_vector in query_vectors:
+            nearest_neighbors = db_annoy_index.get_nns_by_vector(query_vector, 20)
+            query_to_db_nearest[query_file].extend([db_files[i] for i in nearest_neighbors])
+
+    tasks_to_submit = []
+    for query_file, nearest_db_files in query_to_db_nearest.items():
+        query_data = b''.join(query_data_map[query_file])
+        for db_signature_file in nearest_db_files:
+            db_data = b''.join(db_data_map[db_signature_file])
+            for compressor in config.COMPRESSORS:
+                tasks_to_submit.append((query_data, str(query_file), db_data, str(db_signature_file), compressor))
 
     log("INFO", f"Total NCD calculations to perform: {len(tasks_to_submit)}")
 
@@ -131,7 +168,7 @@ def identify_music(query_audio_path: Path,
                     .setdefault(query_stem, []) \
                     .append((db_path, ncd))
 
-    # remove everything in signatures_of_query_dir
+    # Cleanup
     for signature_file in signatures_of_query_dir_2.iterdir():
         if signature_file.is_file():
             signature_file.unlink()
@@ -177,6 +214,24 @@ def cleanup_temp_files():
     """
     log("DEBUG","Cleaning up temporary files...")
     shutil.rmtree(config.TEMP_DIR)
+
+def load_frequencies(file_path: Path, nf: int):
+    with open(file_path, 'rb') as f:
+        content = f.read()
+    return [content[i:i+nf] for i in range(0, len(content), nf)]
+
+def vectors_from_frequencies(indices, nf):
+    return np.array([[int(byte) for byte in segment] for segment in indices])
+
+def build_annoy_index(db_files: list[Path], nf: int):
+    index = AnnoyIndex(nf, 'euclidean')
+    for i, db_file in enumerate(db_files):
+        indices = load_frequencies(db_file, nf)
+        vectors = vectors_from_frequencies(indices, nf)
+        for vector in vectors:
+            index.add_item(i, vector)
+    index.build(10)
+    return index
 
 def main():
     """
