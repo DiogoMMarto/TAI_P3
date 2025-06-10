@@ -124,12 +124,11 @@ def identify_music(query_audio_path: Path,
     # Process each query file
     tasks_to_submit = []
     for query_file in query_files:
-        query_indices = load_frequencies(query_file, config.GMF_NUM_FREQS)
-        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 15)
+        query_indices = load_frequencies(query_file)
+        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 20)
         for neighbor_id in nearest_neighbors:
             db_signature_file = db_files[neighbor_id]
-            # print(f"Processing {query_file} against {db_signature_file}")
-            db_data = load_frequencies(db_signature_file, config.GMF_NUM_FREQS)
+            db_data = load_frequencies(db_signature_file)
             for compressor in config.COMPRESSORS:
                 if (query_indices, str(query_file), db_data, str(db_signature_file), compressor) not in tasks_to_submit:
                     tasks_to_submit.append((query_indices, str(query_file), db_data, str(db_signature_file), compressor))
@@ -196,16 +195,28 @@ def cleanup_temp_files():
     log("DEBUG","Cleaning up temporary files...")
     shutil.rmtree(config.TEMP_DIR)
 
-def load_frequencies(file_path: Path, nf: int):
-    with open(file_path, 'rb') as f:
-        content = f.read()
-    # print(f"Loading {file_path}, content length: {len(content)}")
-    return [content[i] for i in range(nf)]
+def load_frequencies(file_path: Path,nf=config.NF) -> np.ndarray:
+    try:
+        with open(file_path, 'rb') as f:
+            binary_data = f.read()
+            if not binary_data:
+                return np.array([])
+            values = np.frombuffer(binary_data, dtype=np.uint8)
+            # padding if necessary
+            if len(values) < nf:
+                padding = np.zeros(nf - len(values), dtype=np.uint8)
+                values = np.concatenate((values, padding))
+        # to python list of integers
+        return values.tolist()
+    except Exception as e:
+        log("ERROR",f"An unexpected error occurred while processing the file: {e}")
+        return np.array([])
 
-def build_annoy_index(db_files: list[Path], nf: int = config.GMF_NUM_FREQS):
+def build_annoy_index(db_files: list[Path], nf: int = config.NF):
+    log("INFO", f"Building Annoy index with {nf} features per item.")
     index = AnnoyIndex(nf, 'euclidean')
     for i, db_file in enumerate(db_files):
-        indices = load_frequencies(db_file, nf)
+        indices = load_frequencies(db_file)
         index.add_item(i, indices)
     index.build(10)
     return index
@@ -225,7 +236,7 @@ def main():
     db_annoy_index = build_annoy_index(db_files)
 
     for query_file_path in config.QUERY_SAMPLES_DIR.iterdir():
-        if query_file_path.suffix.lower() in ['.wav', '.flac', '.mp3'] and query_file_path.name.startswith("link"):
+        if query_file_path.suffix.lower() in ['.wav', '.flac', '.mp3']:# and query_file_path.name.startswith("link"):
             log("INFO",f"Processing query file: {query_file_path.name}")
             
             ranks = identify_music(query_file_path, db_annoy_index, db_files)
