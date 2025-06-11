@@ -6,11 +6,16 @@ import zstandard
 from pathlib import Path
 from log_utils import log
 
+import hashlib
+
+def content_hash(data_bytes: bytes) -> str:
+    return hashlib.sha256(data_bytes).hexdigest()
+
 cs_cache = {}
-# @lru_cache(maxsize=32)
 def get_compressed_size(data_bytes: bytes, compressor_name: str, id: str | None) -> int:
-    if id and id in cs_cache:
-        return cs_cache[(id, compressor_name)]
+    cache_key = content_hash(data_bytes)
+    if cache_key in cs_cache:
+        return cs_cache[cache_key]
     compressed_data = None
     if compressor_name == "gzip":
         compressed_data = gzip.compress(data_bytes)
@@ -19,12 +24,12 @@ def get_compressed_size(data_bytes: bytes, compressor_name: str, id: str | None)
     elif compressor_name == "lzma":
         compressed_data = lzma.compress(data_bytes)
     elif compressor_name == "zstd":
-        cctx = zstandard.ZstdCompressor()
+        cctx = zstandard.ZstdCompressor(level=12)  # Using compression level (1-22)
         compressed_data = cctx.compress(data_bytes)
     else:
         raise ValueError(f"Unsupported compressor: {compressor_name}. Supported: gzip, bzip2, lzma, zstd.")
-    if id:
-        cs_cache[(id, compressor_name)] = len(compressed_data)
+    if cache_key:
+        cs_cache[cache_key] = len(compressed_data)
     return len(compressed_data)
 
 def calculate_ncd_from_file_paths(signature_file_x_path: Path, signature_file_y_path: Path, compressor_name: str) -> float | None:
@@ -46,9 +51,9 @@ def calculate_ncd_from_file_paths(signature_file_x_path: Path, signature_file_y_
 def calculate_ncd_from_data(data_x: bytes, x_file_path: str, data_y: bytes, y_file_path: str, compressor_name: str) -> float | None:
     try:
         if not isinstance(data_x, bytes):
-            data_x = str(data_x).encode()
+            data_x = bytes(data_x)
         if not isinstance(data_y, bytes):
-            data_y = str(data_y).encode()
+            data_y = bytes(data_y)
         c_x = get_compressed_size(data_x, compressor_name, x_file_path)
         c_y = get_compressed_size(data_y, compressor_name, y_file_path)
 

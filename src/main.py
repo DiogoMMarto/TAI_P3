@@ -125,13 +125,14 @@ def identify_music(query_audio_path: Path,
     tasks_to_submit = []
     for query_file in query_files:
         query_indices = load_frequencies(query_file)
-        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 20, search_k=5000)
+        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 20)
         for neighbor_id in nearest_neighbors:
             db_signature_file = db_files[neighbor_id]
             db_data = load_frequencies(db_signature_file)
             for compressor in config.COMPRESSORS:
-                if (query_indices, str(query_file), db_data, str(db_signature_file), compressor) not in tasks_to_submit:
-                    tasks_to_submit.append((query_indices, str(query_file), db_data, str(db_signature_file), compressor))
+                task = (query_indices, str(query_file), db_data, str(db_signature_file), compressor)
+                if not any(np.array_equal(t[0], task[0]) and np.array_equal(t[2], task[2]) and t[1] == task[1] and t[3] == task[3] and t[4] == task[4] for t in tasks_to_submit):
+                    tasks_to_submit.append(task)
 
     log("INFO", f"Total NCD calculations to perform: {len(tasks_to_submit)}")
 
@@ -187,7 +188,70 @@ def rank_results(results_by_compressor: dict[str,dict[str, list[tuple[str, float
         ranks[compressor] = sorted_results
         
     return ranks
-        
+
+def improved_rank_results(results_by_compressor: dict[str, dict[str, list[tuple[str, float]]]]) -> dict[str, list[tuple[str, float]]]:
+    """
+    Improved ranking: aggregates all NCDs per song, uses mean median min max on NCD, and applies softmax to negative mean NCDs.
+    """
+    log("INFO", "--- Improved Ranking Results ---")
+    ranked_results = {}
+    for compressor, results in results_by_compressor.items():
+        # Collect all NCDs per song
+        song_ncds = {}
+        for _, list_of_results in results.items():
+            for name, ncd in list_of_results:
+                song_name = name.split("/")[-2]  # Extract song name from path
+                if ncd > 0.97:  # Skip very high NCD values indicating poor matches
+                    continue
+                song_ncds.setdefault(song_name, []).append(ncd)
+        # Compute mean NCD for each song
+        print(song_ncds)
+        song_scores = {song: np.mean(ncds) for song, ncds in song_ncds.items()}
+        # Add median NCD to the scoring
+        song_scores = {song: (np.mean(ncds), np.median(ncds), np.max(ncds), np.min(ncds), len(ncds)) for song, ncds in song_ncds.items()}
+        # Combine all scores into a single score
+        song_scores = {song: ((scores[0] + scores[1] + scores[2] + scores[3])/4) / scores[4]  for song, scores in song_scores.items()}
+        print(song_scores)
+        # Softmax on negative mean NCDs (lower NCD = higher score)
+        ncd_values = np.array(list(song_scores.values()))
+        if len(ncd_values) == 0:
+            continue
+        softmax_scores = softmax(-ncd_values)
+        # Map back to song names
+        softmax_dict = {song: score for song, score in zip(song_scores.keys(), softmax_scores)}
+        # Sort
+        ranked_results[compressor] = sorted(softmax_dict.items(), key=lambda x: x[1], reverse=True)
+    return ranked_results
+
+def rank_results_weighted(results_by_compressor, alpha=5.0):
+    ranked_results = {}
+    for compressor, results in results_by_compressor.items():
+        song_ncds = {}
+        # Gather all NCDs for each song across all segments
+        for _, list_of_results in results.items():
+            for name, ncd in list_of_results:
+                song_name = name.split('/')[-2]
+                # Calculate weighted score based on NCDs, giving higher weight to lower NCDs
+                song_ncds.setdefault(song_name, []).append(ncd)
+        song_scores = {}
+        # Calculate weighted score for each song based on NCDs
+        for song, ncds in song_ncds.items():
+            ncds = np.array(ncds)
+            weights = np.exp(-alpha * ncds)  # Lower NCDs get exponentially higher weight
+            weighted_score = np.sum(weights) / len(ncds)
+            song_scores[song] = weighted_score
+        # Softmax for ranking
+        values = np.array(list(song_scores.values()))
+        softmax_scores = softmax(values)
+        softmax_dict = {song: score for song, score in zip(song_scores.keys(), softmax_scores)}
+        ranked_results[compressor] = sorted(softmax_dict.items(), key=lambda x: x[1], reverse=True)
+    return ranked_results
+
+def weighted_score(ncds, alpha=5.0):
+    # Lower NCDs get exponentially higher weight
+    weights = np.exp(-alpha * np.array(ncds))
+    return np.sum(weights) / len(ncds)
+
 def cleanup_temp_files():
     """
     Cleans up temporary files created during processing.
@@ -207,27 +271,24 @@ def load_frequencies(file_path: Path,nf=config.NF) -> np.ndarray:
                 padding = np.zeros(nf - len(values), dtype=np.uint8)
                 values = np.concatenate((values, padding))
         # info about the frequency signatures
-        values = values.astype(np.uint32)
+        values = values.astype(np.float32)
         avg = int(np.mean(values))
-        std = int(np.std(values))
-        median = int(np.median(values))
-        order_info = int(sum((i+1)*v for i, v in enumerate(values)))
-        peak_value = int(np.max(values))
-        values = values / (avg if avg != 0 else 1)
-        values = np.concatenate([values, [avg, std, median, order_info, peak_value]])
-
-        return values.tolist()
+        order_info = int(sum((i+1)*v for i, v in enumerate(values))) % 256
+        peak_value = np.max(values)
+        # Concatenate stats
+        features = np.concatenate([values, [avg, order_info, peak_value]])
+        return features
     except Exception as e:
         log("ERROR",f"An unexpected error occurred while processing the file: {e}")
         return np.array([])
 
 def build_annoy_index(db_files: list[Path], nf: int = config.NF):
     log("INFO", f"Building Annoy index with {nf} features per item.")
-    index = AnnoyIndex(nf + 5, 'euclidean')
+    index = AnnoyIndex(nf + 3, 'euclidean')  # +3 for avg, order_info, peak_value
     for i, db_file in enumerate(db_files):
         indices = load_frequencies(db_file)
         index.add_item(i, indices)
-    index.build(45)
+    index.build(30)
     return index
 
 def main():
@@ -249,7 +310,7 @@ def main():
             log("INFO",f"Processing query file: {query_file_path.name}")
             
             ranks = identify_music(query_file_path, db_annoy_index, db_files)
-            p = rank_results(ranks)
+            p = improved_rank_results(ranks)
             log("INFO",f"Ranked results for {query_file_path.name}: {p}")
         else:
             log("WARNING",f"Skipping non-audio file: {query_file_path.name}")
