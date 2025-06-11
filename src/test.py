@@ -172,6 +172,8 @@ def main():
         f.write("Noise Level Analysis Results:\n")
         for compressor in COMPRESSORS:
             f.write(f"\nCompressor: {compressor}\n")
+            f.write(f"Noise Type: {args.noise_type}\n")
+            f.write(f"Noise Levels: {noise_levels}\n")
             f.write(f"Accuracies: {accuracies_by_compressor[compressor]}\n")
             f.write(f"F1 Scores: {f1_scores_by_compressor[compressor]}\n")
 
