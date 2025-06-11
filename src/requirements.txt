@@ -1,0 +1,5 @@
+zstandard
+matplotlib
+numpy
+scikit-learn
+annoy
