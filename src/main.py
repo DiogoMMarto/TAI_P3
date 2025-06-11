@@ -125,7 +125,7 @@ def identify_music(query_audio_path: Path,
     tasks_to_submit = []
     for query_file in query_files:
         query_indices = load_frequencies(query_file)
-        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 20)
+        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 20, search_k=5000)
         for neighbor_id in nearest_neighbors:
             db_signature_file = db_files[neighbor_id]
             db_data = load_frequencies(db_signature_file)
@@ -206,7 +206,16 @@ def load_frequencies(file_path: Path,nf=config.NF) -> np.ndarray:
             if len(values) < nf:
                 padding = np.zeros(nf - len(values), dtype=np.uint8)
                 values = np.concatenate((values, padding))
-        # to python list of integers
+        # info about the frequency signatures
+        values = values.astype(np.uint32)
+        avg = int(np.mean(values))
+        std = int(np.std(values))
+        median = int(np.median(values))
+        order_info = int(sum((i+1)*v for i, v in enumerate(values)))
+        peak_value = int(np.max(values))
+        values = values / (avg if avg != 0 else 1)
+        values = np.concatenate([values, [avg, std, median, order_info, peak_value]])
+
         return values.tolist()
     except Exception as e:
         log("ERROR",f"An unexpected error occurred while processing the file: {e}")
@@ -214,11 +223,11 @@ def load_frequencies(file_path: Path,nf=config.NF) -> np.ndarray:
 
 def build_annoy_index(db_files: list[Path], nf: int = config.NF):
     log("INFO", f"Building Annoy index with {nf} features per item.")
-    index = AnnoyIndex(nf, 'euclidean')
+    index = AnnoyIndex(nf + 5, 'euclidean')
     for i, db_file in enumerate(db_files):
         indices = load_frequencies(db_file)
         index.add_item(i, indices)
-    index.build(10)
+    index.build(45)
     return index
 
 def main():

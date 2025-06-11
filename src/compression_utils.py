@@ -45,10 +45,10 @@ def calculate_ncd_from_file_paths(signature_file_x_path: Path, signature_file_y_
 
 def calculate_ncd_from_data(data_x: bytes, x_file_path: str, data_y: bytes, y_file_path: str, compressor_name: str) -> float | None:
     try:
-        if data_x is not bytes:
-            data_x = bytes(data_x)
-        if data_y is not bytes:
-            data_y = bytes(data_y)
+        if not isinstance(data_x, bytes):
+            data_x = str(data_x).encode()
+        if not isinstance(data_y, bytes):
+            data_y = str(data_y).encode()
         c_x = get_compressed_size(data_x, compressor_name, x_file_path)
         c_y = get_compressed_size(data_y, compressor_name, y_file_path)
 
