@@ -27,10 +27,10 @@ TEMP_DIR = BASE_DIR / "temp"
 GMF_WINDOW_SIZE = 3192    # -ws option
 GMF_SHIFT = 512           # -sh option
 GMF_DOWNSAMPLING = 4      # -ds option
-GMF_NUM_FREQS = 2         # -nf option
+GMF_NUM_FREQS = 3         # -nf option
 
 # --- Compressors ---
-COMPRESSORS = ["gzip", "bzip2", "lzma", "zstd"]
+COMPRESSORS = ["bzip2"]#["gzip", "bzip2", "lzma", "zstd"]
 
 # --- Parameters ---
 SEGMENT_DURATION = 30
@@ -39,3 +39,8 @@ SEGMENT_DURATION = 30
 DATABASE_SIGNATURES_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 QUERY_SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
+
+# --- Calculate the freqs per segment ---
+NF = (int(
+        (SEGMENT_DURATION * 44100 - GMF_WINDOW_SIZE * GMF_DOWNSAMPLING) / (GMF_SHIFT * GMF_DOWNSAMPLING)
+    ) + 1) * GMF_NUM_FREQS

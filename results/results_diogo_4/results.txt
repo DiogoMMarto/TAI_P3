@@ -1,0 +1,7 @@
+Noise Level Analysis Results:
+
+Compressor: bzip2
+Noise Type: brown
+Noise Levels: [0.   0.05 0.1  0.15]
+Accuracies: [1.0, 0.5454545454545454, 0.36363636363636365, 0.2727272727272727]
+F1 Scores: [1.0, 0.6606060606060606, 0.48917748917748916, 0.3737373737373737]
