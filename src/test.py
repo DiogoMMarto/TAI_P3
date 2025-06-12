@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report
 from log_utils import log
-from main import identify_music, prepare_database_signatures, rank_results, build_annoy_index
+from main import identify_music, prepare_database_signatures, rank_results, build_annoy_index , rank_results_DV
 from config import QUERY_SAMPLES_DIR, TEMP_DIR, COMPRESSORS, DATABASE_SIGNATURES_DIR, DATABASE_MUSIC_DIR
 from audio_utils import add_noise
 import concurrent.futures
@@ -55,7 +55,7 @@ def process_query(query_file: Path, noise_type, noise_level) -> dict[str, tuple[
     
     # Identify the music using the already initialized Annoy index and db_files
     ranks = identify_music(noisy_query, db_annoy_index=_db_annoy_index, db_files=_db_files)
-    p = rank_results(ranks)
+    p = rank_results_DV(ranks)
     log("INFO", f"Ranked results for {noisy_query.name}: {p}")
     
     # Extract top result for each compressor

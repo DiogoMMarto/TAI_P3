@@ -125,7 +125,7 @@ def identify_music(query_audio_path: Path,
     tasks_to_submit = []
     for query_file in query_files:
         query_indices = load_frequencies(query_file)
-        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 20)
+        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 50)
         for neighbor_id in nearest_neighbors:
             db_signature_file = db_files[neighbor_id]
             db_data = load_frequencies(db_signature_file)
@@ -251,6 +251,63 @@ def weighted_score(ncds, alpha=5.0):
     weights = np.exp(-alpha * np.array(ncds))
     return np.sum(weights) / len(ncds)
 
+def rank_results_DV(results_by_compressor: dict[str, dict[str, list[tuple[str, float]]]]) -> dict[str, list[tuple[str, float]]]:
+    """
+    Ranks the results by assign weigthed scores on each segment based on exponential decay of NCD and penalziing segments that appear in multiple segments.
+    """
+    log("INFO","--- Ranking Results ---")
+    ranked_results: dict[str , dict[str,float]] = {}
+    for compressor, results in results_by_compressor.items():
+        ranked_results[compressor] = {}
+        for _ , list_of_results in results.items():
+            list_of_results.sort(key=lambda x: x[1])
+            top_10_results = list_of_results[:10]  # Take top 10 results
+            worse_score = top_10_results[-1][1]  # Get the worst score in the top 10
+            for name, score in top_10_results:
+                song_name = name.split("/")[-2]
+                points = exp(-(score - worse_score)) - 1
+                ranked_results[compressor].setdefault(song_name, 0)
+                ranked_results[compressor][song_name] += points
+    
+    segment_appearance_values: dict[str, dict[str, list]] = {}
+    for compressor, results in results_by_compressor.items():
+        for _, list_of_results in results.items():
+            for name, score in list_of_results:
+                song_name = name.split("/")[-2]
+                segment_number = name.split("/")[-1]
+                song_segment_key = f"{song_name}_{segment_number}"
+                segment_appearance_values.setdefault(compressor, {}).setdefault(song_segment_key, [])
+                segment_appearance_values[compressor][song_segment_key].append(score)
+                
+    # segments that appear in multiple segments with near same NCDs are penalized
+    for compressor, segments in segment_appearance_values.items():
+        for song_segment_key, scores in segments.items():
+            # compute the variance of the scores
+            if len(scores) < 2:
+                continue
+            max_score = max(scores)
+            scores_minus_max = sum([score - max_score for score in scores])
+            # if scores_minus_max high then we dont penalize heavyly
+            penalty = exp(-(scores_minus_max / len(scores)))-0.5
+            song_name = song_segment_key.split("_")[0]
+            if song_name in ranked_results[compressor]:
+                ranked_results[compressor][song_name] *= penalty
+          
+    # softmax the scores
+    ranks = {}
+    for compressor, results in ranked_results.items():
+        scores = [(song, result) for song, result in results.items()]
+        softmax_scores = softmax([score[1] for score in scores])
+        for song, score in zip(scores, softmax_scores):
+            ranks.setdefault(compressor, {})[song[0]] = score
+            
+    # Sort the results
+    for compressor, results in ranks.items():
+        sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
+        ranks[compressor] = sorted_results
+        
+    return ranks
+
 def cleanup_temp_files():
     """
     Cleans up temporary files created during processing.
@@ -312,7 +369,7 @@ def main():
             log("INFO",f"Processing query file: {query_file_path.name}")
             
             ranks = identify_music(query_file_path, db_annoy_index, db_files)
-            p = improved_rank_results(ranks)
+            p = rank_results_DV(ranks)
             log("INFO",f"Ranked results for {query_file_path.name}: {p}")
         else:
             log("WARNING",f"Skipping non-audio file: {query_file_path.name}")
