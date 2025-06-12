@@ -28,7 +28,7 @@ def get_compressed_size(data_bytes: bytes, compressor_name: str, id: str | None)
         compressed_data = cctx.compress(data_bytes)
     else:
         raise ValueError(f"Unsupported compressor: {compressor_name}. Supported: gzip, bzip2, lzma, zstd.")
-    if cache_key:
+    if cache_key and id:
         cs_cache[cache_key] = len(compressed_data)
     return len(compressed_data)
 

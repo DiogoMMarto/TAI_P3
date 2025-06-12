@@ -131,8 +131,7 @@ def identify_music(query_audio_path: Path,
             db_data = load_frequencies(db_signature_file)
             for compressor in config.COMPRESSORS:
                 task = (query_indices, str(query_file), db_data, str(db_signature_file), compressor)
-                if not any(np.array_equal(t[0], task[0]) and np.array_equal(t[2], task[2]) and t[1] == task[1] and t[3] == task[3] and t[4] == task[4] for t in tasks_to_submit):
-                    tasks_to_submit.append(task)
+                tasks_to_submit.append(task)
 
     log("INFO", f"Total NCD calculations to perform: {len(tasks_to_submit)}")
 
@@ -259,32 +258,35 @@ def cleanup_temp_files():
     log("DEBUG","Cleaning up temporary files...")
     shutil.rmtree(config.TEMP_DIR)
 
-def load_frequencies(file_path: Path,nf=config.NF) -> np.ndarray:
+def load_frequencies(file_path: Path,nf=config.NF) -> list[int]:
     try:
         with open(file_path, 'rb') as f:
             binary_data = f.read()
             if not binary_data:
-                return np.array([])
+                return []
             values = np.frombuffer(binary_data, dtype=np.uint8)
             # padding if necessary
             if len(values) < nf:
                 padding = np.zeros(nf - len(values), dtype=np.uint8)
                 values = np.concatenate((values, padding))
-        # info about the frequency signatures
-        values = values.astype(np.float32)
+        # reorder the values so that 1,2,3,4,5,6 goes to 1,3,5,2,4,6
+        new_values = []
+        for i in range(config.GMF_NUM_FREQS):
+            new_values.extend(values[i::config.GMF_NUM_FREQS].tolist())
+
         avg = int(np.mean(values))
-        order_info = int(sum((i+1)*v for i, v in enumerate(values))) % 256
         peak_value = np.max(values)
         # Concatenate stats
-        features = np.concatenate([values, [avg, order_info, peak_value]])
+        features = new_values + [avg, peak_value]
         return features
+    
     except Exception as e:
         log("ERROR",f"An unexpected error occurred while processing the file: {e}")
-        return np.array([])
+        return []
 
 def build_annoy_index(db_files: list[Path], nf: int = config.NF):
     log("INFO", f"Building Annoy index with {nf} features per item.")
-    index = AnnoyIndex(nf + 3, 'euclidean')  # +3 for avg, order_info, peak_value
+    index = AnnoyIndex(nf + 2, 'euclidean')  # +3 for avg, peak_value
     for i, db_file in enumerate(db_files):
         indices = load_frequencies(db_file)
         index.add_item(i, indices)
