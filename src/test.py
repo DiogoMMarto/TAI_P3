@@ -144,29 +144,36 @@ def main():
 
     os.makedirs(args.results_dir, exist_ok=True)
     
-    # Plot accuracy and F1 score
+    # Plot all compressors in one figure
+    plt.figure(figsize=(12, 6))
+
+    # Accuracy subplot
+    plt.subplot(1, 2, 1)
     for compressor in COMPRESSORS:
-        plt.figure(figsize=(12, 6))
-        plt.subplot(1, 2, 1)
-        plt.plot(noise_levels, accuracies_by_compressor[compressor], marker='o')
-        plt.title(f'Accuracy for {compressor}')
+        plt.plot(noise_levels, accuracies_by_compressor[compressor], marker='o', label=compressor)
+        plt.title('Accuracy vs Noise Level')
         plt.xlabel('Noise Level')
         plt.ylabel('Accuracy')
         plt.ylim(0, 1.05)
         plt.grid()
+        plt.legend()
 
-        plt.subplot(1, 2, 2)
-        plt.plot(noise_levels, f1_scores_by_compressor[compressor], marker='o', color='orange')
-        plt.title(f'F1 Score for {compressor}')
+    # F1 Score subplot
+    plt.subplot(1, 2, 2)
+    for compressor in COMPRESSORS:
+        plt.plot(noise_levels, f1_scores_by_compressor[compressor], marker='o', label=compressor)
+        plt.title('F1 Score vs Noise Level')
         plt.xlabel('Noise Level')
         plt.ylabel('F1 Score')
         plt.ylim(0, 1.05)
         plt.grid()
+        plt.legend()
 
-        plt.tight_layout()
-        plt.savefig(f"{args.results_dir}/{compressor}_noise_analysis.png")
-        log("INFO", f"Saved plots for {compressor} in {args.results_dir}")
-        plt.close()
+    plt.tight_layout()
+    plt.savefig(f"{args.results_dir}/combined_noise_analysis.png")
+    log("INFO", f"Saved combined plot in {args.results_dir}")
+    plt.close()
+
     
     with open(f"{args.results_dir}/results.txt", "w") as f:
         f.write("Noise Level Analysis Results:\n")
