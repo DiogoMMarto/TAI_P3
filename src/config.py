@@ -30,7 +30,7 @@ GMF_DOWNSAMPLING = 4      # -ds option
 GMF_NUM_FREQS = 3         # -nf option
 
 # --- Compressors ---
-COMPRESSORS = ["bzip2"]#["gzip", "bzip2", "lzma", "zstd"]
+COMPRESSORS = ["gzip", "bzip2", "lzma", "zstd"]
 
 # --- Parameters ---
 SEGMENT_DURATION = 30
