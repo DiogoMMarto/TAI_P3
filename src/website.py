@@ -12,7 +12,7 @@ from pydub.utils import get_prober_name # For debugging ffmpeg/pydub setup
 from uuid import uuid4 # For unique filenames
 
 import config # Import your configuration module
-from main import identify_music, build_annoy_index, rank_results_DV, rank_results # Import your music recognition functions
+from main import identify_music, build_annoy_index, rank_results_DV, rank_results, prepare_database_signatures # Import your music recognition functions
 
 app = FastAPI()
 
@@ -41,6 +41,7 @@ db_annoy_index = None
 @app.on_event("startup")
 async def startup_event():
     global db_files, db_annoy_index
+    
     # Ensure the TEMP_DIR exists
     if not config.TEMP_DIR.exists():
         config.TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,7 +54,7 @@ async def startup_event():
     # For systems where ffmpeg might be split (like Linux/macOS), you might also
     # need ffprobe: set_paths_once(ffmpeg="/usr/bin/ffmpeg", ffprobe="/usr/bin/ffprobe")
     # set_paths_once(ffmpeg="C:/path/to/your/ffmpeg/bin/ffmpeg.exe") # Uncomment and modify if needed
-
+    prepare_database_signatures()
     print(f"pydub using prober: {get_prober_name()}") # This will tell you if pydub found ffmpeg or avconv
     print("Loading music database and building Annoy index...")
     if not config.DATABASE_SIGNATURES_DIR.exists():
@@ -62,6 +63,7 @@ async def startup_event():
     for db_signature_dir in config.DATABASE_SIGNATURES_DIR.iterdir():
         if db_signature_dir.is_dir():
             db_files.extend(list(db_signature_dir.rglob("*.freqs")))
+    print(f"Found {len(db_files)} signature files in the database.")
     db_annoy_index = build_annoy_index(db_files)
     print("Annoy index built.")
     
@@ -143,7 +145,7 @@ async def identify_song(file: UploadFile = File(...)):
                 raise HTTPException(status_code=500, detail=f"Error converting audio file ({file.content_type}) to WAV: {e}. Ensure ffmpeg is installed and in your system's PATH.")
 
         results = identify_music(audio_to_process_path, db_annoy_index, db_files)
-        ranked_results = rank_results_DV(results)
+        ranked_results = rank_results(results)
 
         # Return the ranked results
         return JSONResponse(content={"ranked_results": ranked_results})

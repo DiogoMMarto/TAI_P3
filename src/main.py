@@ -125,7 +125,7 @@ def identify_music(query_audio_path: Path,
     tasks_to_submit = []
     for query_file in query_files:
         query_indices = load_frequencies(query_file)
-        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, len(db_files))
+        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 300)
         for neighbor_id in nearest_neighbors:
             db_signature_file = db_files[neighbor_id]
             db_data = load_frequencies(db_signature_file)
@@ -313,6 +313,9 @@ def cleanup_temp_files():
     log("DEBUG","Cleaning up temporary files...")
     shutil.rmtree(config.TEMP_DIR)
 
+import functools
+
+@functools.lru_cache(maxsize=10000)
 def load_frequencies(file_path: Path,nf=config.NF) -> list[int]:
     try:
         with open(file_path, 'rb') as f:
@@ -328,7 +331,7 @@ def load_frequencies(file_path: Path,nf=config.NF) -> list[int]:
         new_values = []
         for i in range(config.GMF_NUM_FREQS):
             new_values.extend(values[i::config.GMF_NUM_FREQS].tolist())
-
+        # new_values = values.tolist()
         avg = int(np.mean(values))
         peak_value = np.max(values)
         # Concatenate stats
