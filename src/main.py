@@ -125,7 +125,7 @@ def identify_music(query_audio_path: Path,
     tasks_to_submit = []
     for query_file in query_files:
         query_indices = load_frequencies(query_file)
-        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, 100)
+        nearest_neighbors = db_annoy_index.get_nns_by_vector(query_indices, len(db_files))
         for neighbor_id in nearest_neighbors:
             db_signature_file = db_files[neighbor_id]
             db_data = load_frequencies(db_signature_file)
