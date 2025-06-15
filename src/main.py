@@ -116,7 +116,7 @@ def identify_music(query_audio_path: Path,
                                                    database_signature_path=signatures_of_query_dir):
         log("ERROR", "Failed to process query audio file.")
         return {}
-
+    log("INFO", f"Query audio file processed, signatures saved to {signatures_of_query_dir}")
     results_by_compressor = {}
     query_files = list(signatures_of_query_dir_2.rglob("*.freqs"))
     log("INFO", f"Found {len(query_files)} query signature files.")
@@ -204,13 +204,11 @@ def improved_rank_results(results_by_compressor: dict[str, dict[str, list[tuple[
                     continue
                 song_ncds.setdefault(song_name, []).append(ncd)
         # Compute mean NCD for each song
-        print(song_ncds)
         song_scores = {song: np.mean(ncds) for song, ncds in song_ncds.items()}
         # Add median NCD to the scoring
         song_scores = {song: (np.mean(ncds), np.median(ncds), np.max(ncds), np.min(ncds), len(ncds)) for song, ncds in song_ncds.items()}
         # Combine all scores into a single score
         song_scores = {song: ((scores[0] + scores[1] + scores[2] + scores[3])/4) / scores[4]  for song, scores in song_scores.items()}
-        print(song_scores)
         # Softmax on negative mean NCDs (lower NCD = higher score)
         ncd_values = np.array(list(song_scores.values()))
         if len(ncd_values) == 0:

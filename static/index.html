@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Identifier</title>
+    <style>
+        /* General body styling */
+        body {
+            font-family: 'Inter', Arial, sans-serif; /* Using Inter font as per guidelines */
+            background-color: #f0f4f8; /* A light, soft background color */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh; /* Use min-height to allow content to grow */
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Container for main content */
+        .container {
+            background: #ffffff;
+            border-radius: 12px; /* More rounded corners */
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1); /* Stronger, softer shadow */
+            padding: 30px;
+            margin: 20px;
+            width: 90%;
+            max-width: 800px; /* Increased max-width to accommodate cards */
+            text-align: center;
+        }
+
+        /* Headings */
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 25px;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+
+        /* Form styling */
+        form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px; /* Space between form elements */
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            background-color: #fdfdfd;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            color: #555;
+            font-size: 1.1em;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f8f8f8;
+            width: calc(100% - 20px); /* Adjust for padding */
+            max-width: 400px;
+        }
+
+        /* Buttons styling */
+        button {
+            background-color: #3498db; /* A vibrant blue */
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px; /* Slightly more rounded */
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Soft shadow */
+        }
+
+        button:hover {
+            background-color: #2980b9; /* Darker blue on hover */
+            transform: translateY(-2px); /* Slight lift effect */
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+        }
+
+        button:active {
+            transform: translateY(0); /* Press effect */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Specific styles for recording buttons */
+        #record-button, #stop-button, #upload-recording {
+            margin: 10px;
+            width: auto; /* Allow buttons to size based on content */
+            min-width: 150px;
+        }
+
+        /* Audio preview styling */
+        #audio-preview {
+            width: 100%;
+            max-width: 400px;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Results section */
+        #results {
+            margin-top: 30px;
+            padding: 25px;
+            background: #ecf0f1; /* Light grey background for results */
+            border-radius: 10px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05); /* Inset shadow */
+            width: 100%; /* Take full width of container */
+            max-width: 750px; /* Adjusted to fit cards */
+            text-align: left;
+            font-family: 'Inter', Arial, sans-serif;
+            font-size: 0.95em;
+        }
+
+        #results h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.5em;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        /* New styles for result cards */
+        .result-cards-container {
+            display: flex;
+            flex-wrap: wrap; /* Allow cards to wrap to the next line */
+            gap: 20px; /* Space between cards */
+            justify-content: center; /* Center cards in the container */
+            margin-top: 20px;
+        }
+
+        .result-card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            flex: 1; /* Allow cards to grow and shrink */
+            min-width: 280px; /* Minimum width for a card */
+            max-width: 350px; /* Maximum width for a card */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .result-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .card-header {
+            width: 100%;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .card-header h3 {
+            margin: 0;
+            color: #3498db; /* Blue for the compression method */
+            font-size: 1.4em;
+            font-weight: 700;
+        }
+
+        .card-title {
+            font-weight: 600;
+            color: #444;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+
+        .card-rank {
+            font-weight: 700;
+            color: #e67e22; /* Orange for rank */
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .card-confidence {
+            color: #555;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+        }
+
+        .youtube-link {
+            display: inline-block;
+            background-color: #e74c3c; /* YouTube red */
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+
+        .youtube-link:hover {
+            background-color: #c0392b; /* Darker red on hover */
+        }
+
+        /* Hidden utility class */
+        .hidden {
+            display: none;
+        }
+
+        /* Message box for alerts (instead of alert()) */
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            text-align: center;
+            border: 2px solid #e74c3c; /* Red border for errors */
+            display: none; /* Hidden by default */
+        }
+
+        .message-box button {
+            margin-top: 20px;
+            background-color: #e74c3c;
+            box-shadow: none;
+        }
+        .message-box button:hover {
+            background-color: #c0392b;
+            transform: none;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Music Identifier</h1>
+
+        <form id="upload-form" enctype="multipart/form-data">
+            <label for="audio-file">Upload your audio file:</label>
+            <input type="file" id="audio-file" name="file" accept="audio/*" required>
+            <button type="submit">Identify Song from File</button>
+        </form>
+
+        <div>
+            <h2>Or record your audio:</h2>
+            <button id="record-button">Start Recording</button>
+            <button id="stop-button" class="hidden">Stop Recording</button>
+            <audio id="audio-preview" controls class="hidden"></audio>
+            <button id="upload-recording" class="hidden">Upload Recording</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <div id="messageBox" class="message-box">
+        <p id="messageContent"></p>
+        <button id="messageBoxClose">OK</button>
+    </div>
+
+    <script>
+        // Custom alert function using a modal-like message box
+        function showMessageBox(message) {
+            const messageBox = document.getElementById('messageBox');
+            const messageContent = document.getElementById('messageContent');
+            messageContent.textContent = message;
+            messageBox.style.display = 'block';
+        }
+
+        document.getElementById('messageBoxClose').addEventListener('click', () => {
+            document.getElementById('messageBox').style.display = 'none';
+        });
+
+        const form = document.getElementById("upload-form");
+        const resultsDiv = document.getElementById("results");
+        const recordButton = document.getElementById("record-button");
+        const stopButton = document.getElementById("stop-button");
+        const audioPreview = document.getElementById("audio-preview");
+        const uploadRecordingButton = document.getElementById("upload-recording");
+
+        let mediaRecorder;
+        let audioChunks = [];
+        let recordedMimeType = ''; // To store the actual MIME type used for recording
+
+        // Function to handle fetching and displaying results
+        async function sendAudioForIdentification(formData, filename) {
+            try {
+                // Display a loading message
+                resultsDiv.innerHTML = `<h2>Results:</h2><p>Identifying "${filename}"... Please wait.</p>`;
+
+                const response = await fetch("http://127.0.0.1:8000/identify/", { // Explicitly target FastAPI backend
+                    method: "POST",
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Failed to identify song: ${errorData.detail || response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                // --- START MODIFIED RESULTS DISPLAY LOGIC ---
+                let resultsHtml = `<h2>Identification Results</h2>`;
+                const rankedResults = data.ranked_results; // Access the "ranked_results" key
+
+                if (Object.keys(rankedResults).length === 0) {
+                    resultsHtml += `<p>No matches found.</p>`;
+                } else {
+                    resultsHtml += `<div class="result-cards-container">`;
+                    for (const compressionMethod in rankedResults) {
+                        if (rankedResults.hasOwnProperty(compressionMethod)) {
+                            const methodResults = rankedResults[compressionMethod];
+                            resultsHtml += `
+                                <div class="result-card">
+                                    <div class="card-header">
+                                        <h3>${compressionMethod.toUpperCase()} Results</h3>
+                                    </div>
+                            `;
+                            // Display top 3 results for each method
+                            const topResults = methodResults.slice(0, 3);
+                            if (topResults.length === 0) {
+                                resultsHtml += `<p>No results for this method.</p>`;
+                            } else {
+                                topResults.forEach((result, index) => {
+                                    const songTitle = result[0];
+                                    const confidence = (result[1] * 100).toFixed(2); // Convert to percentage, 2 decimal places
+                                    const youtubeSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(songTitle)}`;
+                                    
+                                    resultsHtml += `
+                                        <p class="card-rank">Rank ${index + 1}</p>
+                                        <p class="card-title">${songTitle}</p>
+                                        <p class="card-confidence">Confidence: ${confidence}%</p>
+                                        <a href="${youtubeSearchUrl}" target="_blank" class="youtube-link">Watch on YouTube</a>
+                                    `;
+                                    if (index < topResults.length - 1) {
+                                        resultsHtml += `<hr style="width: 80%; border: 0; border-top: 1px dashed #eee; margin: 15px auto;">`; // Separator
+                                    }
+                                });
+                            }
+                            resultsHtml += `</div>`; // Close result-card
+                        }
+                    }
+                    resultsHtml += `</div>`; // Close result-cards-container
+                }
+                resultsDiv.innerHTML = resultsHtml;
+                // --- END MODIFIED RESULTS DISPLAY LOGIC ---
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<p style="color: red;">${error.message}</p>`;
+                showMessageBox("Identification Error: " + error.message);
+            }
+        }
+
+
+        // Handle file upload
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const audioFile = document.getElementById("audio-file").files[0];
+            if (!audioFile) {
+                showMessageBox("Please select an audio file to upload.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", audioFile, audioFile.name); // Pass original filename
+
+            await sendAudioForIdentification(formData, audioFile.name);
+        });
+
+        // Handle audio recording
+        recordButton.addEventListener("click", async () => {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showMessageBox("Your browser does not support audio recording.");
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                // Determine the best supported MIME type for recording
+                // Prioritize common browser-friendly formats that can be converted server-side
+                const preferredMimeTypes = [
+                    'audio/webm;codecs=opus', // High quality, good compression
+                    'audio/webm',
+                    'audio/ogg;codecs=opus',
+                    'audio/ogg',
+                    'audio/mpeg', // For MP3, if supported by browser MediaRecorder
+                    'audio/wav'   // Fallback, often supported but larger files
+                ];
+
+                recordedMimeType = '';
+                for (const type of preferredMimeTypes) {
+                    if (MediaRecorder.isTypeSupported(type)) {
+                        recordedMimeType = type;
+                        break;
+                    }
+                }
+
+                if (!recordedMimeType) {
+                    throw new Error("No supported audio recording format found in your browser. Try updating your browser.");
+                }
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType: recordedMimeType });
+
+                audioChunks = []; // Clear previous chunks
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    // Extract the base MIME type (e.g., "audio/webm" from "audio/webm;codecs=opus")
+                    const baseMimeType = recordedMimeType.split(';')[0];
+                    // Determine the file extension based on the base MIME type
+                    let fileExtension = 'bin'; // Default to a generic binary extension
+                    if (baseMimeType === 'audio/webm') {
+                        fileExtension = 'webm';
+                    } else if (baseMimeType === 'audio/ogg') {
+                        fileExtension = 'ogg';
+                    } else if (baseMimeType === 'audio/mpeg') {
+                        fileExtension = 'mp3';
+                    } else if (baseMimeType === 'audio/wav') {
+                        fileExtension = 'wav';
+                    } else if (baseMimeType === 'audio/flac') {
+                        fileExtension = 'flac';
+                    }
+
+                    const audioBlob = new Blob(audioChunks, { type: baseMimeType });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioPreview.src = audioUrl;
+                    audioPreview.classList.remove("hidden");
+                    uploadRecordingButton.classList.remove("hidden");
+
+                    // Prepare the audio blob for upload
+                    // Using .onclick to replace previous listener to prevent multiple attachments
+                    uploadRecordingButton.onclick = async () => {
+                        const formData = new FormData();
+                        const filename = `recording.${fileExtension}`;
+                        formData.append("file", audioBlob, filename);
+
+                        await sendAudioForIdentification(formData, filename);
+                    };
+
+                    // Stop all tracks from the stream to release microphone
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                recordButton.classList.add("hidden");
+                stopButton.classList.remove("hidden");
+                resultsDiv.innerHTML = `<p>Recording started... Click "Stop Recording" when done.</p>`;
+            } catch (error) {
+                resultsDiv.innerHTML = `<p style="color: red;">Error accessing microphone: ${error.message}</p>`;
+                showMessageBox("Error accessing microphone: " + error.message);
+            }
+        });
+
+        stopButton.addEventListener("click", () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+            stopButton.classList.add("hidden");
+            recordButton.classList.remove("hidden");
+            // Audio chunks are cleared on next record button click
+            // audioPreview and uploadRecordingButton are shown/hidden by mediaRecorder.onstop
+        });
+    </script>
+</body>
+</html>

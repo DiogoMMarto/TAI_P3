@@ -308,7 +308,6 @@ def process_audio_file_parallel(
         (i, output_audio_path, temp_dir, database_signature_path, segment_duration) 
         for i in range(number_of_segments)
     ]
-    
     # Process segments in parallel
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
